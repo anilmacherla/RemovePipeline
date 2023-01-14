@@ -25,6 +25,7 @@ namespace RemovePipeline
 				{
 					var fileLocation = File.ReadAllLines(dialog.FileName);
 					List<string> lines = new List<string>(fileLocation);
+					string filePath = "C:/Modified.txt";
 					for (int i = 5; i < lines.Count; i++)
 					{
 						string line = lines[i];
@@ -41,7 +42,8 @@ namespace RemovePipeline
 						line = CheckAndModifyForOffstAccountColumn(13, line);
 						lines[i] = line;
 					}
-					File.WriteAllLines("C:/Modified2.txt", lines);
+					File.Delete(filePath);
+					File.WriteAllLines(filePath, lines);
 				}
 				MessageBox.Show("File Modification Successful", "Message");
 			}
@@ -55,25 +57,33 @@ namespace RemovePipeline
 		private static string CheckAndModifyForItemColumn(int nthOccurrence, string line)
 		{
 			string value = GetColumnValue(nthOccurrence, line, out int index);
-			if (value != string.Empty)
+			string output = line;
+			bool canContinue = true;
+			do
 			{
-				if (long.TryParse(value, out _))
+				if (value != string.Empty && long.TryParse(value, out _))
 				{
-					StringBuilder sb = new StringBuilder(line);
+					StringBuilder sb = new StringBuilder(output);
 					sb.Remove(index, 1);
-					return sb.ToString();
+					output = sb.ToString();
 				}
-			}
-			return line;
+				value = GetColumnValue(nthOccurrence, output, out int index2);
+				index = index2;
+				if (value == string.Empty || (value != string.Empty && !long.TryParse(value, out _)))
+				{
+					canContinue = false;
+				}
+			} while (canContinue);
+			return output;
 		}
-
-
 
 		private static string CheckAndModifyForPurchaseOrderTextColumn(int nthOccurrence, string line)
 		{
+			int nthOccurrence2 = nthOccurrence + 1;
 			var index = line.TakeWhile(c => (nthOccurrence -= (c == '|' ? 1 : 0)) > 0).Count();
+			var nextIndex = line.TakeWhile(c => (nthOccurrence2 -= (c == '|' ? 1 : 0)) > 0).Count();
 
-			if (line.Length > index + 1 && !String.IsNullOrWhiteSpace(line.Substring(index + 1, 1))
+			if (line.Length > index + 1 && !String.IsNullOrWhiteSpace(line.Substring(index + 1, nextIndex - 1).Trim())
 				&& !long.TryParse(line.Substring(index + 1, 1), out _))
 			{
 				StringBuilder sb = new StringBuilder(line);
@@ -85,7 +95,7 @@ namespace RemovePipeline
 
 		private static string ValidateForDate(int nthOccurrence, string line)
 		{
-			string value = GetColumnValue(nthOccurrence, line, out int index).Replace(",", "");
+			string value = GetColumnValue(nthOccurrence, line, out int index).Trim();
 			if (value != string.Empty)
 			{
 				if (!DateTime.TryParseExact(value, "MM/dd/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
@@ -165,8 +175,6 @@ namespace RemovePipeline
 		private static string CheckAndModifyForCostElemColumn(int nthOccurrence, string line)
 		{
 			string value = GetColumnValue(nthOccurrence, line, out int index);
-			//string nextColValue = GetColumnValue(nthOccurrence + 1, line, out int index2) ?? "0";
-
 			if (value != string.Empty)
 			{
 				if (long.TryParse(value, out _))
@@ -199,17 +207,27 @@ namespace RemovePipeline
 		private static string CheckAndModifyForOffsettingAccountNameColumn(int nthOccurrence, string line)
 		{
 			string value = GetColumnValue(nthOccurrence, line, out int index);
-
-			if (value != string.Empty)
+			string output = line;
+			bool canContinue = true;
+			do
 			{
-				if (!long.TryParse(value, out _))
+				if (value != string.Empty)
 				{
-					StringBuilder sb = new StringBuilder(line);
-					sb.Remove(index, 1);
-					return sb.ToString();
+					if (!long.TryParse(value, out _))
+					{
+						StringBuilder sb = new StringBuilder(output);
+						sb.Remove(index, 1);
+						output = sb.ToString();
+					}
 				}
-			}
-			return line;
+				value = GetColumnValue(nthOccurrence, output, out int index2);
+				index = index2;
+				if (value == string.Empty || (value != string.Empty && long.TryParse(value, out _)))
+				{
+					canContinue = false;
+				}
+			} while (canContinue);
+			return output;
 		}
 
 		private static string GetColumnValue(int nthOccurrence, string line, out int index)
