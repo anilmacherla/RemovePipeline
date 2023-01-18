@@ -19,6 +19,7 @@ namespace RemovePipeline
 			dialog.Title = "Browse Text Files Only";
 			dialog.Filter = "Text files | *.txt";
 			dialog.Multiselect = false;
+			int[] lengths = new int[] { 10, 4, 40, 10, 10, 10, 11, 13, 10, 20, 35, 10 };
 			try
 			{
 				if (dialog.ShowDialog() == DialogResult.OK)
@@ -29,17 +30,14 @@ namespace RemovePipeline
 					for (int i = 5; i < lines.Count; i++)
 					{
 						string line = lines[i];
-						line = CheckAndModifyForItemColumn(3, line);
-						line = CheckAndModifyForPurchaseOrderTextColumn(4, line);
-						line = ValidateForDate(5, line);
-						line = ValidateForDate(6, line);
-						line = CheckAndModifyForPostgDateColumn(7, line);
-						line = CheckAndModifyForVblValueColumn(8, line);
-						line = CheckAndModifyForAuxAcctAs1Column(9, line);
-						line = CheckAndModifyForCostElemColumn(10, line);
-						line = CheckAndModifyForCostElemNameColumn(11, line);
-						line = CheckAndModifyForOffsettingAccountNameColumn(12, line);
-						line = CheckAndModifyForOffstAccountColumn(13, line);
+						if (line.Contains("---")) continue;
+						int nthOccurrence = 1;
+						foreach (int length in lengths)
+						{
+							if (nthOccurrence > 13) continue;
+							line = CheckAndModifyString(nthOccurrence, line, length);
+							nthOccurrence++;
+						}
 						lines[i] = line;
 					}
 					File.Delete(filePath);
@@ -49,198 +47,39 @@ namespace RemovePipeline
 			}
 			catch (Exception ex)
 			{
-				MessageBox.Show("Error Occurred. Error message : " + ex.Message);
+				MessageBox.Show("Error Occurred. Error message : " + ex.Message + "\n" + "Stack Trace: " + ex.StackTrace);
 			}
 
 		}
 
-		private static string CheckAndModifyForItemColumn(int nthOccurrence, string line)
+		private static string CheckAndModifyString(int nthOccurrence, string line, int length)
 		{
-			string value = GetColumnValue(nthOccurrence, line, out int index);
-			string output = line;
-			bool canContinue = true;
+			string value = GetCellValue(nthOccurrence, line, out int index);
 			do
 			{
-				if (value != string.Empty && long.TryParse(value, out _))
+				if (value.Length != length)
 				{
-					StringBuilder sb = new StringBuilder(output);
+					StringBuilder sb = new StringBuilder(line);
 					sb.Remove(index, 1);
-					output = sb.ToString();
+					line = sb.ToString();
 				}
-				value = GetColumnValue(nthOccurrence, output, out int index2);
+				value = GetCellValue(nthOccurrence, line, out int index2);
 				index = index2;
-				if (value == string.Empty || (value != string.Empty && !long.TryParse(value, out _)))
-				{
-					canContinue = false;
-				}
-			} while (canContinue);
-			return output;
-		}
-
-		private static string CheckAndModifyForPurchaseOrderTextColumn(int nthOccurrence, string line)
-		{
-			int nthOccurrence2 = nthOccurrence + 1;
-			var index = line.TakeWhile(c => (nthOccurrence -= (c == '|' ? 1 : 0)) > 0).Count();
-			var nextIndex = line.TakeWhile(c => (nthOccurrence2 -= (c == '|' ? 1 : 0)) > 0).Count();
-
-			if (line.Length > index + 1 && !String.IsNullOrWhiteSpace(line.Substring(index + 1, nextIndex - 1).Trim())
-				&& !long.TryParse(line.Substring(index + 1, 1), out _))
-			{
-				StringBuilder sb = new StringBuilder(line);
-				sb.Remove(index, 1);
-				return sb.ToString();
-			}
+			} while (value.Length != length);
 			return line;
 		}
 
-		private static string ValidateForDate(int nthOccurrence, string line)
-		{
-			string value = GetColumnValue(nthOccurrence, line, out int index).Trim();
-			if (value != string.Empty)
-			{
-				if (!DateTime.TryParseExact(value, "MM/dd/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
-				{
-					StringBuilder sb = new StringBuilder(line);
-					sb.Remove(index, 1);
-					return sb.ToString();
-				}
-			}
-			return line;
-		}
-
-		private static string CheckAndModifyForPostgDateColumn(int nthOccurrence, string line)
-		{
-			string value = GetColumnValue(nthOccurrence, line, out int index);
-			if (value != string.Empty)
-			{
-				if (long.TryParse(value, out _))
-				{
-					StringBuilder sb = new StringBuilder(line);
-					sb.Remove(index, 1);
-					return sb.ToString();
-				}
-			}
-			return line;
-		}
-
-		private static string CheckAndModifyForVblValueColumn(int nthOccurrence, string line)
-		{
-			string value = GetColumnValue(nthOccurrence, line, out int index);
-			if (value != string.Empty)
-			{
-				if (float.TryParse(value, out _))
-				{
-					StringBuilder sb = new StringBuilder(line);
-					sb.Remove(index, 1);
-					return sb.ToString();
-				}
-			}
-			return line;
-		}
-
-		private static string CheckAndModifyForOffstAccountColumn(int nthOccurrence, string line)
-		{
-			string value = GetColumnValue(nthOccurrence, line, out int index);
-			if (value != string.Empty)
-			{
-				StringBuilder sb = new StringBuilder(line);
-				sb.Remove(index, 1);
-				return sb.ToString();
-			}
-			return line;
-		}
-
-		private static string CheckAndModifyForAuxAcctAs1Column(int nthOccurrence, string line)
-		{
-			string currValue = GetColumnValue(nthOccurrence - 1, line, out int i).Trim();
-			if (currValue == string.Empty)
-			{
-				return line;
-			}
-			string value = GetColumnValue(nthOccurrence, line, out int index);
-			string nextColValue = GetColumnValue(nthOccurrence + 1, line, out int index2) ?? "0";
-
-			if (value != string.Empty)
-			{
-				if (long.TryParse(value, out _) && long.TryParse(nextColValue, out _))
-				{
-					StringBuilder sb = new StringBuilder(line);
-					sb.Remove(index, 1);
-					return sb.ToString();
-				}
-			}
-			return line;
-		}
-
-		private static string CheckAndModifyForCostElemColumn(int nthOccurrence, string line)
-		{
-			string value = GetColumnValue(nthOccurrence, line, out int index);
-			if (value != string.Empty)
-			{
-				if (long.TryParse(value, out _))
-				{
-					StringBuilder sb = new StringBuilder(line);
-					sb.Remove(index, 1);
-					return sb.ToString();
-				}
-			}
-			return line;
-		}
-
-		private static string CheckAndModifyForCostElemNameColumn(int nthOccurrence, string line)
-		{
-			string value = GetColumnValue(nthOccurrence, line, out int index);
-			string nextColValue = GetColumnValue(nthOccurrence + 1, line, out int index2) ?? "0";
-
-			if (nextColValue != string.Empty)
-			{
-				if (!long.TryParse(nextColValue, out _))
-				{
-					StringBuilder sb = new StringBuilder(line);
-					sb.Remove(index, 1);
-					return sb.ToString();
-				}
-			}
-			return line;
-		}
-
-		private static string CheckAndModifyForOffsettingAccountNameColumn(int nthOccurrence, string line)
-		{
-			string value = GetColumnValue(nthOccurrence, line, out int index);
-			string output = line;
-			bool canContinue = true;
-			do
-			{
-				if (value != string.Empty)
-				{
-					if (!long.TryParse(value, out _))
-					{
-						StringBuilder sb = new StringBuilder(output);
-						sb.Remove(index, 1);
-						output = sb.ToString();
-					}
-				}
-				value = GetColumnValue(nthOccurrence, output, out int index2);
-				index = index2;
-				if (value == string.Empty || (value != string.Empty && long.TryParse(value, out _)))
-				{
-					canContinue = false;
-				}
-			} while (canContinue);
-			return output;
-		}
-
-		private static string GetColumnValue(int nthOccurrence, string line, out int index)
+		private static string GetCellValue(int nthOccurrence, string line, out int index)
 		{
 			int nthOccurrence2 = nthOccurrence + 1;
 			int startIndex = line.TakeWhile(c => (nthOccurrence -= (c == '|' ? 1 : 0)) > 0).Count();
-			index = startIndex;
 			int endIndex = line.TakeWhile(c => (nthOccurrence2 -= (c == '|' ? 1 : 0)) > 0).Count();
+			index = endIndex;
 			if (line.Length <= endIndex || line.Length <= startIndex)
 			{
 				return string.Empty;
 			}
-			string value = line.Substring(startIndex + 1, Math.Abs(endIndex - startIndex - 1)).Trim();
+			string value = line.Substring(startIndex + 1, Math.Abs(endIndex - startIndex - 1));
 			return value;
 		}
 
